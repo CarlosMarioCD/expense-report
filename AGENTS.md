@@ -7,7 +7,7 @@ Standard library only.
 - Test: the TEST_CMD in factory.conf (must pass before any PR). There is no linter.
 
 ## Conventions
-- Python 3.10+, standard library only: never add a dependency.
+- Python 3.10+. Nothing outside the standard library is installed.
 - Money is `Decimal`, never float. Dates are `datetime.date`.
 - Every behaviour change gets a unittest in `tests/`, written BEFORE the implementation.
 - Keep functions under 30 lines. Parsing lives in `report/expenses.py`, printing in `report/__main__.py`.
