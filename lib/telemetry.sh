@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vendored from Emer-42/demo-factory-dashboard, client/telemetry.sh (commit 32ed9bf). Fixes go upstream first.
+# Vendored from Emer-42/demo-factory-dashboard, client/telemetry.sh (commit bb2d576). Fixes go upstream first.
 # telemetry.sh - jq-free telemetry client for the workshop dashboard (docs/SPEC.md, "Client").
 #
 # Source it from a factory script:
@@ -44,7 +44,14 @@ _tel_esc() {
   # shellcheck disable=SC1003  # a lone backslash in single quotes is intended
   local s="${1-}" bs='\' dq='"' nl=$'\n' cr=$'\r' tab=$'\t' i c hex out
   s="${s:0:500}"
-  s="${s//"$bs"/$bs$bs}"
+  # Backslashes by hand: bash 5.2+ (patsub_replacement) turns a \\ replacement into \, and bash 3.2 keeps
+  # the quotes of a quoted replacement, so ${s//\\/\\\\} has no spelling that works on both.
+  out=""
+  while [[ "$s" == *"$bs"* ]]; do
+    out="$out${s%%"$bs"*}$bs$bs"
+    s="${s#*"$bs"}"
+  done
+  s="$out$s"
   s="${s//"$dq"/$bs$dq}"
   s="${s//"$nl"/${bs}n}"
   s="${s//"$cr"/${bs}r}"
@@ -145,10 +152,25 @@ _tel_resolve_identity() {
   TELEMETRY_PARTICIPANT="$p"
 }
 
+# True on Git Bash, MSYS2 and Cygwin, where curl is (usually) a native Windows binary. FACTORY_TELEMETRY_UNAME
+# overrides uname -s, for tests.
+_tel_native_curl() {
+  case "${FACTORY_TELEMETRY_UNAME:-$(uname -s 2>/dev/null)}" in
+    MINGW* | MSYS* | CYGWIN*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 _tel_post_headers_and_send() {  # $1 = curl -m seconds, $2 = data source ("@-" or "@file"); extra curl args after
   local m="$1" data="$2"
   shift 2
-  if [ -n "${FACTORY_TELEMETRY_TOKEN:-}" ]; then
+  if [ -n "${FACTORY_TELEMETRY_TOKEN:-}" ] && _tel_native_curl; then
+    # Git Bash / MSYS2 on Windows: curl.exe is a native program and cannot open the /dev/fd/N path
+    # that <(...) produces, so the header goes on argv (the token is shared with the room anyway).
+    curl -sS -m "$m" -X POST -H 'Content-Type: application/x-ndjson' \
+      -H "Authorization: Bearer ${FACTORY_TELEMETRY_TOKEN}" --data-binary "$data" "$@" \
+      "${FACTORY_TELEMETRY_URL%/}/v1/events"
+  elif [ -n "${FACTORY_TELEMETRY_TOKEN:-}" ]; then
     # Header via process substitution (printf is a builtin): the token never appears in `ps` argv.
     curl -sS -m "$m" -X POST -H 'Content-Type: application/x-ndjson' \
       -H @<(printf 'Authorization: Bearer %s\n' "${FACTORY_TELEMETRY_TOKEN}") --data-binary "$data" "$@" \
