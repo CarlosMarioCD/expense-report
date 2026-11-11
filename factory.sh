@@ -63,6 +63,9 @@ FEEDBACK=""
 PLAN_ROUND=1
 PLAN_NOTES=""  # every denial's feedback, one "- " line each
 
+# Appended to every task. The agent file says what to do; this says where the result must land,
+# because an agent may otherwise answer in its final message and never write the file.
+DELIVERABLE_RULE="Before you finish, save your result with the Write tool to"
 # Appended to every task: chained commands are checked part by part and get denied.
 SHELL_RULE="Run exactly one shell command per Bash call, with no ;, &&, || or pipes. Use the Read tool to read files."
 
@@ -204,7 +207,7 @@ run_phase() {
   # hooks, CLAUDE.md and .claude/settings.local.json out: only the repo's committed setup applies.
   local -a cmd=(claude -p --agent "$agent" --permission-mode acceptEdits --max-turns "$MAX_TURNS" --model "$MODEL"
     --strict-mcp-config --setting-sources project --output-format stream-json --verbose
-    --disallowedTools "${denied[@]}" --allowedTools "${allowed[@]}" -- "$task $SHELL_RULE")
+    --disallowedTools "${denied[@]}" --allowedTools "${allowed[@]}" -- "$task $DELIVERABLE_RULE $out (the run stops without that file). $SHELL_RULE")
   wrapper="$(timeout_cmd)"
   # --foreground keeps claude in our process group so Ctrl+C still stops it.
   if [[ -n "$wrapper" ]]; then cmd=("$wrapper" --foreground -k 10 "$PHASE_TIMEOUT" "${cmd[@]}"); fi

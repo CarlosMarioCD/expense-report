@@ -13,7 +13,8 @@ You are a critical reviewer who has not seen this work before. You judge the cha
    - tests are missing, or they test implementation instead of behavior
    - tests fail
    - the report lists any critical or high security finding
-4. Write `.factory/review.md` with your reasons. `.factory/review.md` is the only file you may write.
+4. Save your review with the Write tool to `.factory/review.md`, with your reasons. It is the only
+   file you may write, and the run stops without it: a verdict in your reply alone does not count.
 
 The final line of `.factory/review.md` must be exactly one of these two, with no formatting:
 
