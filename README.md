@@ -5,9 +5,11 @@ Es uno de los repos del taller "Software factories with Claude Code".
 
 ## Cómo funciona
 
-La fábrica toma un ticket (un issue de este repo) y lo convierte en un pull request, sola: cuatro sesiones
-de Claude que no se conocen entre sí (plan, build, check, review), más tus revisiones automáticas (los gates).
-**Una vez que arranca, no te pregunta nada:** siempre termina en un PR, aprobado o `[REJECTED]` con el motivo.
+La fábrica toma un ticket (un issue de este repo) y lo convierte en un pull request: cuatro agentes de Claude
+(`planner`, `builder`, `checker`, `reviewer`), cada uno en su propia sesión y sin conocerse entre sí, más tus
+revisiones automáticas (los gates). **Te pregunta una sola cosa:** después del plan espera a que lo apruebes o
+lo rechaces con lo que hay que cambiar. Desde ahí sigue sola y siempre termina en un PR, aprobado o
+`[REJECTED]` con el motivo.
 
 ## 1. Copia el repo (antes del taller)
 
@@ -29,7 +31,7 @@ el PR de vuelta a este repo, donde lo vemos todos.
 |---|---|
 | `AGENTS.md` | el contexto y las reglas que leen los agentes |
 | `gates/` | tus revisiones automáticas (lee [`gates/README.md`](gates/README.md)) |
-| `prompts/` | lo que se le dice a cada fase |
+| `.claude/agents/` | quién es cada agente: un archivo por fase (`planner.md`, `builder.md`, `checker.md`, `reviewer.md`), con su prompt debajo del frontmatter. No le cambies el `name:` |
 | `factory.conf` (avanzado) | qué rutas pueden cambiar los agentes (`SCOPE`), qué comandos pueden correr, el modelo |
 
 No toques `factory.sh`, `lib/` ni `doctor.sh`: son el motor. Después, haz commit en `main`:
@@ -47,7 +49,9 @@ para el tablero de la sala). Luego:
 ./factory.sh 1   # el número del ticket
 ```
 
-Desde aquí corre sola, unos 2 minutos. No toques el repo mientras corre. Mira la terminal: cada fase muestra lo que hace.
+Primero el `planner` escribe el plan (`.factory/plan.md`) y la fábrica te espera: léelo y escribe `y` + Enter
+para aprobarlo, o `n <qué cambiar>` + Enter para que escriba otro con tu comentario. Después corre sola, unos 2
+minutos. No toques el repo mientras corre. Mira la terminal: cada fase muestra lo que hace.
 
 ## 4. Lee el PR, cambia una cosa, repite
 

@@ -112,11 +112,18 @@ def phase_stats(rows: list[Row]) -> Row | None:
     }
 
 
-def last_event(events: list[Row], name: str, **match: str) -> Row | None:
-    for event in reversed(events):
+def last_index(events: list[Row], name: str, **match: str) -> int:
+    """Position of the newest matching event, or -1."""
+    for i in range(len(events) - 1, -1, -1):
+        event = events[i]
         if event.get("event") == name and all(str(event.get(k)) == v for k, v in match.items()):
-            return event
-    return None
+            return i
+    return -1
+
+
+def last_event(events: list[Row], name: str, **match: str) -> Row | None:
+    i = last_index(events, name, **match)
+    return events[i] if i >= 0 else None
 
 
 def phase_status(num: int, events: list[Row], rows: list[Row]) -> str:
@@ -124,8 +131,9 @@ def phase_status(num: int, events: list[Row], rows: list[Row]) -> str:
     phase = str(num)
     if last_event(events, "fail", phase=phase):
         return "failed"
-    if last_event(events, "phase_end", phase=phase):
-        return "done"
+    end = last_index(events, "phase_end", phase=phase)
+    if end >= 0 and end > last_index(events, "phase_start", phase=phase):
+        return "done"  # a denied plan starts phase 1 again: a newer phase_start means running
     if last_event(events, "phase_start", phase=phase) or rows:
         stats = phase_stats(rows)
         return "done" if stats and stats["ok"] and not events else "running"
@@ -153,14 +161,32 @@ def build_phase(num: int, name: str, doc: str, logs: Path, events: list[Row], ro
     }
 
 
+def approval(events: list[Row]) -> Row:
+    """The human's say on the plan: none | waiting | replanning | approved, the plan round, the feedback so far."""
+    feedback = [str(e.get("feedback", "")) for e in events if e.get("event") == "plan_denied"]
+    review = last_index(events, "plan_review")
+    if review < 0 and not feedback:
+        return {"state": "none", "round": 0, "feedback": feedback}
+    newest = max(last_index(events, "plan_review"), last_index(events, "plan_denied"), last_index(events, "plan_approved"))
+    kind = events[newest].get("event")
+    rounds = int(events[newest].get("round") or 0)
+    if kind == "plan_review":
+        return {"state": "waiting", "round": rounds, "feedback": feedback}
+    if kind == "plan_denied":
+        return {"state": "replanning", "round": rounds + 1, "feedback": feedback}
+    return {"state": "approved", "round": rounds, "feedback": feedback}
+
+
 def run_status(events: list[Row]) -> str:
-    """idle | running | failed | rejected | committed | pr"""
+    """idle | running | awaiting_approval | failed | rejected | committed | pr"""
     if not last_event(events, "run_start"):
         return "idle"
     if last_event(events, "fail"):
         return "failed"
     finish = last_event(events, "finish")
-    return str(finish.get("result", "done")) if finish else "running"
+    if finish:
+        return str(finish.get("result", "done"))
+    return "awaiting_approval" if approval(events)["state"] == "waiting" else "running"
 
 
 def run_summary(events: list[Row]) -> Row:
@@ -190,10 +216,13 @@ def build_state(factory_dir: Path, root: str = "") -> Row:
     logs = factory_dir / "logs"
     events = read_jsonl(logs / "events.jsonl")
     phases = [build_phase(n, name, doc, logs, events, root) for n, name, doc in PHASES]
+    # Plans the human denied keep their logs as phase1.round<N>.jsonl; what they cost still counts.
+    denied = [phase_stats(read_jsonl(f)) for f in sorted(logs.glob("phase1.round*.jsonl"))]
     return {
         "run": run_summary(events),
+        "approval": approval(events),
         "phases": phases,
         "gates": [e for e in events if e.get("event") in ("scope", "gate")],  # scope checks and participant gates
         "docs": {doc: read_text(factory_dir / doc) for doc in DOCS},
-        "cost": round(sum(p["stats"]["cost"] for p in phases if p["stats"]), 4),
+        "cost": round(sum(s["cost"] for s in [*(p["stats"] for p in phases), *denied] if s), 4),
     }

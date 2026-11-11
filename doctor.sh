@@ -128,6 +128,18 @@ check_gates() {
   if problem="$(check_gate_files)"; then ok "gates"; else fix "gates" "$problem"; fi
 }
 
+check_agents() {  # the four agent files factory.sh runs, one per phase
+  local agent missing=""
+  for agent in planner builder checker reviewer; do
+    [[ -s ".claude/agents/$agent.md" ]] || missing+=" .claude/agents/$agent.md"
+  done
+  if [[ -z "$missing" ]]; then
+    ok "agent files"
+  else
+    fix "agent files" "missing${missing}: git checkout upstream/main -- .claude/agents"
+  fi
+}
+
 check_time_limit() {
   if command -v gtimeout >/dev/null || command -v timeout >/dev/null; then return 0; fi
   warn "phase time limit" "no timeout command, so a stuck phase never times out: $(install_hint coreutils)"
@@ -156,6 +168,7 @@ if [[ -n "$CONF_OK" ]]; then
   check_tests
 fi
 check_gates
+check_agents
 check_time_limit
 check_behind
 

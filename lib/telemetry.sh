@@ -20,8 +20,8 @@
 
 _TEL_RE_PART='^[A-Za-z0-9][A-Za-z0-9._-]{0,38}$'
 _TEL_RE_WS='^[a-z0-9][a-z0-9-]{0,39}$'
-_TEL_EVENTS=" hello run_start preflight phase_start phase_end scope gate verdict fail finish "
-_TEL_ALLOW=" phase name after ok files value reason code result url issue cost_usd turns seconds gate message showcase upstream title branch verdict stopped_by cost tier model "
+_TEL_EVENTS=" hello run_start preflight phase_start phase_end plan_review plan_approved plan_denied scope gate verdict fail finish "
+_TEL_ALLOW=" phase name agent round after ok files value reason code result url issue cost_usd turns seconds gate message showcase upstream title branch verdict stopped_by cost tier model "
 
 TELEMETRY_SPOOL=""
 TELEMETRY_RUN_ID=""
