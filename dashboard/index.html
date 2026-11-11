@@ -2169,6 +2169,49 @@ h1 .num { color: var(--pv-text-tertiary); font-weight: 600; }
   .joint .line::before { left: 50%; right: auto; top: 0; bottom: 0; width: 2px; height: auto; margin: 0 0 0 -1px; }
   .meters { gap: var(--pv-space-5); }
 }
+
+/* ── the human's call on the plan ─────────────────────── */
+body:has(#decision:not([hidden])) { grid-template-rows: auto auto auto 1fr; }
+.decision[hidden] { display: none; }
+.decision {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--pv-space-4) var(--pv-space-6);
+  padding: var(--pv-space-5) var(--pv-space-6); border: 2px solid var(--pv-sage-600); border-radius: var(--pv-radius-md);
+  background: var(--pv-sage-band); animation: rise .25s ease-out;
+}
+.decision.quiet { border-width: 1px; border-color: var(--pv-border); background: var(--pv-bg-secondary); }
+.decision .ask { flex: 1 1 420px; min-width: 0; }
+.decision .eyebrow { border: 0; padding: 0; }
+.decision h3 {
+  margin: var(--pv-space-1) 0; font-family: var(--pv-font-display); font-size: var(--pv-text-2xl);
+  font-weight: 700; letter-spacing: var(--pv-tracking-tight); color: var(--pv-text);
+}
+.decision p { margin: 0; color: var(--pv-text-secondary); font-size: var(--pv-text-md); }
+.decision .said { margin: var(--pv-space-2) 0 0; padding: 0; list-style: none; display: grid; gap: var(--pv-space-1); }
+.decision .said li { color: var(--pv-text); font-size: var(--pv-text-md); }
+.decision .said li::before { content: "“"; color: var(--pv-text-tertiary); }
+.decision .said li::after { content: "”"; color: var(--pv-text-tertiary); }
+.decision .actions { display: flex; gap: var(--pv-space-3); flex-wrap: wrap; }
+.decision button {
+  font: inherit; font-size: var(--pv-text-md); font-weight: 700; letter-spacing: var(--pv-tracking-wide, .01em);
+  display: inline-flex; align-items: center; gap: var(--pv-space-2); cursor: pointer;
+  padding: var(--pv-space-3) var(--pv-space-6); border-radius: var(--pv-radius-md); border: 2px solid transparent;
+}
+.decision button:disabled { opacity: .5; cursor: progress; }
+.decision .approve { background: var(--pv-sage-600); color: var(--pv-white); }
+.decision .approve:hover:not(:disabled) { filter: brightness(1.08); }
+.decision .deny { background: var(--pv-bg); color: var(--pv-tone-critical-ink); border-color: var(--pv-tone-critical-stroke); }
+.decision .deny:hover:not(:disabled) { background: var(--pv-tone-critical-bg); }
+.decision .plain { background: transparent; color: var(--pv-text-secondary); }
+.decision form { flex: 1 1 100%; display: grid; gap: var(--pv-space-3); }
+.decision textarea {
+  font: inherit; font-size: var(--pv-text-md); width: 100%; min-height: 84px; resize: vertical; box-sizing: border-box;
+  padding: var(--pv-space-3) var(--pv-space-4); border: 1px solid var(--pv-border); border-radius: var(--pv-radius-md);
+  background: var(--pv-bg); color: var(--pv-text);
+}
+.decision .error { color: var(--pv-tone-critical-ink); font-weight: 600; }
+.decision.quiet .ic { animation: spin 1s linear infinite; color: var(--pv-sage-600); }
+@keyframes rise { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .decision, .decision.quiet .ic { animation: none; } }
 </style>
 </head>
 <body>
@@ -2218,6 +2261,8 @@ h1 .num { color: var(--pv-text-tertiary); font-weight: 600; }
 </header>
 
 <section class="pipeline" id="pipeline" aria-label="Factory phases"></section>
+
+<section class="decision" id="decision" aria-live="polite" hidden></section>
 
 <section class="panes">
   <div class="pane">
@@ -2402,10 +2447,13 @@ function renderPipeline() {
   const pre = { ok: ["ok", "✓"], failed: ["fail", "✗"], running: ["running", "…"] }[run.preflight] || ["", "·"];
   const verdict = run.verdict ? (run.verdict === "APPROVE" ? ["ok", "✓"] : ["fail", "✗"]) : ["", "·"];
   const [p1, p2, p3, p4] = state.phases;
+  const ap = state.approval;
+  const human = { waiting: ["running", "…"], replanning: ["fail", "✗"], approved: ["ok", "✓"] }[ap.state];
+  const planJoint = human ? joint({ doc: p1.doc, label: "human", diamond: gate(...human), lit: ap.state === "approved" }) : joint({ doc: p1.doc });
   // ◇preflight  1 ─plan.md─ 2 ─build.md ◇scope─ 3 ─report.md ◇scope─ 4 ─review.md ◇verdict─ PR
   $("pipeline").innerHTML = [
     joint({ label: "preflight", diamond: gate(...pre), lit: run.preflight === "ok" }),
-    cardHtml(p1), joint({ doc: p1.doc }),
+    cardHtml(ap.round > 1 ? { ...p1, name: `${p1.name} · round ${ap.round}` } : p1), planJoint,
     cardHtml(p2), joint({ doc: p2.doc, label: "scope", diamond: scopeGate(2) }),
     cardHtml(p3), joint({ doc: p3.doc, ...checkpointAfter3() }),
     cardHtml(p4), joint({ doc: p4.doc, label: "verdict", diamond: gate(...verdict) }),
@@ -2414,8 +2462,8 @@ function renderPipeline() {
 }
 function renderHeader() {
   const run = state.run;
-  const labels = { idle: "Idle", running: "Running", pr: "PR opened", committed: "Approved", rejected: "Rejected", failed: "Stopped" };
-  const tone = { running: "running", pr: "ok", committed: "ok", rejected: "fail", failed: "fail" }[run.status] || "";
+  const labels = { idle: "Idle", running: "Running", awaiting_approval: "Your call", pr: "PR opened", committed: "Approved", rejected: "Rejected", failed: "Stopped" };
+  const tone = { running: "running", awaiting_approval: "running", pr: "ok", committed: "ok", rejected: "fail", failed: "fail" }[run.status] || "";
   $("status").className = `pill ${tone}`;
   $("status").innerHTML = `<span class="dot"></span><span>${labels[run.status] || esc(run.status)}</span>`;
   $("title").innerHTML = run.issue ? `<span class="num">#${esc(run.issue)}</span> ${esc(run.title || "…")}` : "Waiting for a run";
@@ -2473,13 +2521,75 @@ function renderDoc() {
   const el = $("doc");
   if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
 }
+// The human's call on the plan. Rebuilt only when the question changes, so typing survives live updates.
+let denying = false;
+let sending = false;
+let decisionError = "";
+let sentFor = "";           // "<run start>:<round>" once the panel delivered an answer for that round
+function decisionHtml(ap, status) {
+  if (ap.state === "waiting" && status === "awaiting_approval" && sentFor === `${state.run.started}:${ap.round}`) {
+    return `<div class="ask"><span class="eyebrow">${GLYPH.loader} Sent</span><h3>The factory is picking up your answer…</h3></div>`;
+  }
+  if (ap.state === "waiting" && status === "awaiting_approval") {
+    const eyebrow = `<span class="eyebrow">Your call · plan round ${ap.round}</span>`;
+    if (denying) return `<div class="ask">${eyebrow}<h3>What should the next plan change?</h3>
+      <p>A fresh session rewrites the plan with this feedback, then asks you again.</p></div>
+      <form id="deny-form"><textarea id="feedback" maxlength="2000" placeholder="e.g. Also return 404 for an unknown name" required></textarea>
+      <div class="actions"><button type="submit" class="deny" ${sending ? "disabled" : ""}>${GLYPH.x}Send and re-plan</button>
+      <button type="button" class="plain" data-act="cancel">Cancel</button>${decisionError ? `<span class="error">${esc(decisionError)}</span>` : ""}</div></form>`;
+    return `<div class="ask">${eyebrow}<h3>The plan is ready. Build it?</h3>
+      <p>Read <b>plan.md</b> on the right. Nothing is built until you approve it.</p>
+      ${decisionError ? `<p class="error">${esc(decisionError)}</p>` : ""}</div>
+      <div class="actions"><button class="approve" data-act="approve" ${sending ? "disabled" : ""}>${GLYPH.check}Approve plan</button>
+      <button class="deny" data-act="deny" ${sending ? "disabled" : ""}>${GLYPH.x}Deny</button></div>`;
+  }
+  if (ap.state === "replanning" && status === "running") {
+    const said = ap.feedback.map((f) => `<li>${esc(f)}</li>`).join("");
+    return `<div class="ask"><span class="eyebrow">${GLYPH.loader} Re-planning · round ${ap.round}</span>
+      <h3>A fresh session is rewriting the plan with your feedback</h3><ul class="said">${said}</ul></div>`;
+  }
+  return "";
+}
+function renderDecision() {
+  const el = $("decision");
+  const ap = state.approval;
+  const key = `${state.run.started}:${ap.state}:${ap.round}:${state.run.status}:${denying}:${sending}:${decisionError}:${sentFor}`;
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  const typed = $("feedback")?.value ?? "";
+  const html = decisionHtml(ap, state.run.status);
+  el.hidden = !html;
+  el.className = `decision ${ap.state === "replanning" || html.includes("picking up") ? "quiet" : ""}`;
+  el.innerHTML = html;
+  const box = $("feedback");
+  if (box) { box.value = typed; box.focus(); }
+}
+async function sendDecision(decision, feedback = "") {
+  sending = true; decisionError = ""; render();
+  try {
+    const r = await fetch("/api/decision", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ round: state.approval.round, decision, feedback }),
+    });
+    if (!r.ok) decisionError = (await r.json().catch(() => ({}))).detail || `the panel could not send it (${r.status}); answer in the terminal`;
+    else { denying = false; sentFor = `${state.run.started}:${state.approval.round}`; }
+  } catch {
+    decisionError = "the panel is offline; answer in the terminal (y, or n <what to change>)";
+  }
+  sending = false; render();
+}
 function render() {
   if (!state) return;
-  renderHeader(); renderPipeline(); renderTabs(); renderFeed(); renderDoc();
+  if (state.approval.state !== "waiting") { denying = false; decisionError = ""; }
+  renderHeader(); renderPipeline(); renderDecision(); renderTabs(); renderFeed(); renderDoc();
 }
 
 // ── events ──────────────────────────────────────────────────
 document.addEventListener("click", (e) => {
+  const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "approve") { sendDecision("approve"); return; }
+  if (act === "deny") { denying = true; decisionError = ""; render(); return; }
+  if (act === "cancel") { denying = false; decisionError = ""; render(); return; }
   const phaseEl = e.target.closest("[data-phase]");
   const docEl = e.target.closest("[data-doc]");
   if (docEl && !docEl.disabled && state?.docs[docEl.dataset.doc]) { selectedDoc = docEl.dataset.doc; render(); return; }
@@ -2493,7 +2603,17 @@ $("feed").addEventListener("scroll", (e) => {
   const el = e.target;
   stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
 });
+document.addEventListener("submit", (e) => {
+  if (e.target.id !== "deny-form") return;
+  e.preventDefault();
+  const feedback = $("feedback").value.trim();
+  if (feedback) sendDecision("deny", feedback);
+});
 document.addEventListener("keydown", (e) => {
+  if (e.target.closest?.("textarea, input")) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("deny-form")?.requestSubmit();  // Cmd+Enter sends
+    return;
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "f") { selectedPhase = null; selectedDoc = null; stickToBottom = true; render(); }
   else if (/^[1-4]$/.test(e.key)) { selectedPhase = Number(e.key); stickToBottom = true; render(); }

@@ -40,12 +40,12 @@ branch_taken() {  # locally or on the fork
 }
 
 # compute_tier: what the participant changed on top of the workshop repo.
-# 3 = a prompt, 2 = a gate, 1 = neither.
+# 3 = an agent file (.claude/agents/), 2 = a gate, 1 = neither.
 compute_tier() {
   local ref="upstream/main" changed
   git fetch -q upstream main 2>/dev/null || ref="origin/main"
   changed="$(git diff --name-only "$ref...$FACTORY_BASE" 2>/dev/null || true)"
-  if grep -q '^prompts/' <<<"$changed"; then
+  if grep -q '^\.claude/agents/' <<<"$changed"; then
     echo 3
   elif grep -q '^gates/' <<<"$changed"; then
     echo 2
@@ -96,6 +96,12 @@ write_pr_body() {  # write_pr_body <verdict> <file>
       printf '\n\n<details><summary>Plan</summary>\n\n'
       cat .factory/plan.md
       printf '\n</details>\n'
+    fi
+    if [[ -n "${PLAN_NOTES:-}" ]]; then
+      printf '\n## Plan review\n\nA human denied %s plan(s) before approving this one. Their feedback:\n\n%s\n' \
+        "$((PLAN_ROUND - 1))" "$PLAN_NOTES"
+    elif [[ -z "${FACTORY_AUTO_APPROVE:-}" ]]; then
+      printf '\n## Plan review\n\nA human approved the first plan.\n'
     fi
   } >"$2.tmp"
   # Agent-written text: defuse @mentions (no surprise notifications), stay under GitHub's limit.

@@ -15,4 +15,4 @@ Standard library only.
 
 ## Factory rules
 - Phase state lives in `.factory/` as markdown files. Never put plan or review text in code comments.
-- Only the paths in SCOPE (factory.conf) may change. Do not touch factory.sh, lib/, gates/, prompts/, data/ or this file.
+- Only the paths in SCOPE (factory.conf) may change. Do not touch factory.sh, lib/, gates/, .claude/, data/ or this file.
