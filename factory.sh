@@ -101,6 +101,7 @@ start_run() {
   # Run files never dirty the repo, whatever its .gitignore says (a "*" file ignores itself too).
   [[ -e .factory/.gitignore ]] || printf '*\n' >.factory/.gitignore
   install_traps
+  load_conf                      # factory.conf sets FACTORY_TELEMETRY_URL, so read it before telemetry_init
   telemetry_init .factory/logs
   emit run_start issue="$ISSUE"
   preflight
@@ -157,7 +158,6 @@ preflight() {
   for cmd in claude gh jq git; do
     command -v "$cmd" >/dev/null || die "missing command: $cmd (run ./doctor.sh)"
   done
-  load_conf
   for agent in "${AGENTS[@]}"; do
     [[ -s ".claude/agents/${agent}.md" ]] \
       || die "agent file missing: .claude/agents/${agent}.md (restore it: git checkout upstream/main -- .claude/agents/${agent}.md)"
