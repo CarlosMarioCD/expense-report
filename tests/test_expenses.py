@@ -2,6 +2,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -51,6 +52,61 @@ class ReadAndSummarise(unittest.TestCase):
 
     def test_summary_of_nothing(self) -> None:
         self.assertEqual(summary([]), "No expenses.")
+
+
+def write_file(suffix: str, text: str) -> Path:
+    f = tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False, encoding="utf-8")
+    f.write(text)
+    f.close()
+    return Path(f.name)
+
+
+JSON = '[{"date":"2026-10-03","description":"Taxi","amount":12.5,"currency":"usd"},{"date":"2026-10-05","description":"Lunch","amount":"9","currency":"EUR"}]'
+WANT = [Expense(date(2026, 10, 3), "Taxi", Decimal("12.5"), "USD"), Expense(date(2026, 10, 5), "Lunch", Decimal("9"), "EUR")]
+
+
+class Formats(unittest.TestCase):
+    def test_json(self) -> None:
+        self.assertEqual(read_expenses(write_file(".json", JSON)), WANT)
+
+    def test_extension_case_insensitive(self) -> None:
+        self.assertEqual(read_expenses(write_file(".JSON", JSON)), WANT)
+
+    def test_xml(self) -> None:
+        xml = "<expenses>" + "".join(
+            f"<expense><date>{e.day}</date><description>{e.description}</description>"
+            f"<amount>{e.amount}</amount><currency>{e.currency}</currency></expense>" for e in WANT
+        ) + "</expenses>"
+        self.assertEqual(read_expenses(write_file(".xml", xml)), WANT)
+
+    def test_xlsx(self) -> None:
+        cells = ["date", "description", "amount", "currency", "2026-10-03", "Taxi", "12.5", "usd", "2026-10-05", "Lunch", "9", "EUR"]
+        ss = "<sst xmlns='http://schemas.openxmlformats.org/spreadsheetml/2006/main'>" + "".join(f"<si><t>{c}</t></si>" for c in cells) + "</sst>"
+        rows = "".join("<row>" + "".join(f"<c t='s'><v>{r * 4 + i}</v></c>" for i in range(4)) + "</row>" for r in range(3))
+        sheet = f"<worksheet xmlns='http://schemas.openxmlformats.org/spreadsheetml/2006/main'><sheetData>{rows}</sheetData></worksheet>"
+        path = Path(tempfile.mkdtemp()) / "e.xlsx"
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("xl/sharedStrings.xml", ss)
+            z.writestr("xl/worksheets/sheet1.xml", sheet)
+        self.assertEqual(read_expenses(path), WANT)
+
+    def test_unknown_extension(self) -> None:
+        with self.assertRaises(ReportError):
+            read_expenses(write_file(".txt", "x"))
+
+    def test_malformed_json(self) -> None:
+        with self.assertRaises(ReportError):
+            read_expenses(write_file(".json", "[{"))
+
+    def test_bad_json_row_names_line(self) -> None:
+        bad = JSON.replace('"9"', '"x"')
+        with self.assertRaisesRegex(ReportError, "line 3"):
+            read_expenses(write_file(".json", bad))
+
+    def test_cli_json(self) -> None:
+        out = subprocess.run([sys.executable, "-m", "report", str(write_file(".json", JSON))], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("expenses from", out.stdout)
 
 
 class Cli(unittest.TestCase):
