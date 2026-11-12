@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from report.expenses import Expense, ReportError, parse_row, read_expenses, summary
+from report.expenses import Expense, ReportError, by_month, monthly_totals, parse_row, read_expenses, summary
 
 ROW = {"date": "2026-10-03", "description": "Taxi", "amount": "12.50", "currency": "usd"}
 
@@ -53,6 +53,28 @@ class ReadAndSummarise(unittest.TestCase):
         self.assertEqual(summary([]), "No expenses.")
 
 
+class ByMonth(unittest.TestCase):
+    def setUp(self) -> None:
+        self.xs = [
+            parse_row(ROW, 2),
+            parse_row({**ROW, "amount": "3"}, 3),
+            parse_row({**ROW, "currency": "eur", "amount": "9"}, 4),
+            parse_row({**ROW, "date": "2026-09-30"}, 5),
+        ]
+
+    def test_sums_per_currency(self) -> None:
+        self.assertEqual(monthly_totals(self.xs)["2026-10"], {"USD": Decimal("15.50"), "EUR": Decimal("9")})
+
+    def test_separates_months(self) -> None:
+        self.assertEqual(set(monthly_totals(self.xs)), {"2026-09", "2026-10"})
+
+    def test_renders_blocks(self) -> None:
+        self.assertEqual(by_month(self.xs), "2026-09\n  USD 12.50\n2026-10\n  EUR 9\n  USD 15.50")
+
+    def test_empty(self) -> None:
+        self.assertEqual(by_month([]), "")
+
+
 class Cli(unittest.TestCase):
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run([sys.executable, "-m", "report", *args], capture_output=True, text=True)
@@ -61,6 +83,17 @@ class Cli(unittest.TestCase):
         out = self.run_cli("data/sample.csv")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("expenses from", out.stdout)
+
+    def test_by_month_flag(self) -> None:
+        out = self.run_cli("data/sample.csv", "--by-month")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertRegex(out.stdout, r"expenses from[^\n]*\n\d{4}-\d{2}\n")
+
+    def test_no_flag_no_blocks(self) -> None:
+        self.assertNotRegex(self.run_cli("data/sample.csv").stdout, r"(?m)^\d{4}-\d{2}$")
+
+    def test_unknown_flag_exits_2(self) -> None:
+        self.assertEqual(self.run_cli("data/sample.csv", "--nope").returncode, 2)
 
     def test_bad_file_exits_1(self) -> None:
         self.assertEqual(self.run_cli("missing.csv").returncode, 1)
