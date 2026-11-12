@@ -11,6 +11,7 @@ Standard library only.
 - Money is `Decimal`, never float. Dates are `datetime.date`.
 - Every behaviour change gets a unittest in `tests/`, written BEFORE the implementation.
 - Keep functions under 30 lines. Parsing lives in `report/expenses.py`, printing in `report/__main__.py`.
+- Keep the whole change under 150 lines added+removed (a gate rejects over 200). Write compact code and few, focused tests. For multi-format input use only the standard library (csv, json, zipfile + xml.etree for .xlsx).
 - Bad input raises `ReportError` naming the line; the CLI prints it and exits 1.
 
 ## Factory rules
